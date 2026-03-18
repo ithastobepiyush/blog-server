@@ -99,17 +99,32 @@ server.post("/signup", async (req, res) => {
 
     } catch (err) {
         if (err.code === 11000) {
-            // Distinguish between duplicate email and duplicate username
-            if (err.message && err.message.includes('email')) {
-                return res.status(409).json({ "error": "Email already exists!" });
-            }
-            if (err.message && err.message.includes('username')) {
-                return res.status(409).json({ "error": "Username already taken! Please try again." });
-            }
-            return res.status(409).json({ "error": "Duplicate entry exists!" });
+        // duplicacy error
+        if (err.keyPattern && err.keyPattern["personal_info.email"]) {
+            return res.status(409).json({ error: "Email already exist!" });
         }
-        return res.status(500).json({ "error": err.message });
+        if (err.keyPattern && err.keyPattern["personal_info.username"]) {
+            return res.status(409).json({ error: "Username already exists!" });
+        }
+        }
+        // console.log(err); //instead of throwing internal error to frontend / log them 
+        return res.status(500).json({ "error": "Internal server error" })
     }
+    
+    
+    // catch (err) {
+    //     if (err.code === 11000) {
+    //         // Distinguish between duplicate email and duplicate username
+    //         if (err.message && err.message.includes('email')) {
+    //             return res.status(409).json({ "error": "Email already exists!" });
+    //         }
+    //         if (err.message && err.message.includes('username')) {
+    //             return res.status(409).json({ "error": "Username already taken! Please try again." });
+    //         }
+    //         return res.status(409).json({ "error": "Duplicate entry exists!" });
+    //     }
+    //     return res.status(500).json({ "error": err.message });
+    // }
 });
 
 server.post("/signin", async (req, res) => {
