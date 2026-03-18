@@ -12,9 +12,9 @@ import User from './Schema/User.js'
 const server = express()
 let PORT = 3000
 
-// regex for email &password 
-let emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
-let passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,20}$/;
+// Validation Utility regex for email &password
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,20}$/;
 
 server.use(cors())
 server.use(express.json())
@@ -51,25 +51,39 @@ const generateUsername = async (email) => {
 
 }
 
-
-
 // signup post request -->
 server.post("/signup", async (req, res) => {
     try {
-        let { fullname, email, password } = req.body;
 
-        // Validating the data from frontend
+        const {fullname, email, password} = req.body
+        // handelling error with fat arrow function
+        const sendError = (msg) => {
+            res.status(422).json({
+            error: msg,
+            });
+        };
+        // validating data from frontend
         if (!fullname || fullname.trim().length < 3) {
-            return res.status(400).json({ "error": "Full Name must be at least 3 letters long" });
+            return sendError("Fullname must be 3 letters long!");
         }
+        
         if (!email) {
-            return res.status(400).json({ "error": "Enter email" });
+            return sendError(
+                "Email is required!"
+            )
+        } else if (!emailRegex.test(email)) {
+            return sendError(
+                "Please enter a valid email address (e.g., name@example.com).",
+            );
         }
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({ "error": "Email is invalid" });
-        }
-        if (!passwordRegex.test(password)) {
-            return res.status(400).json({ "error": "Password should be 6 to 20 characters long with a numeric, 1 lowercase and 1 uppercase" });
+        if(!password){
+            return sendError(
+                "Password is required!"
+            )
+        } else if (!passwordRegex.test(password)) {
+            return sendError(
+                "Password must be 8 to 20 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character (like !@#$%^&*).",
+            );
         }
 
         // Hashing of password using bcryptjs
