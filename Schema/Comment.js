@@ -14,6 +14,7 @@ const commentSchema = mongoose.Schema({
     },
     comment: {
         type: String,
+        trim: true,
         required: true
     },
     children: {

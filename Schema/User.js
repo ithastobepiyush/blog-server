@@ -10,10 +10,12 @@ const userSchema = mongoose.Schema({
             type: String,
             lowercase: true,
             required: true,
+            trim: true,
             minlength: [3, 'fullname must be 3 letters long'],
         },
         email: {
             type: String,
+            trim: true,
             required: true,
             lowercase: true,
             unique: true
@@ -26,6 +28,7 @@ const userSchema = mongoose.Schema({
         },
         bio: {
             type: String,
+            trim: true,
             maxlength: [200, 'Bio should not be more than 200'],
             default: "",
         },

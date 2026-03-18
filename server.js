@@ -16,8 +16,8 @@ let PORT = 3000
 let emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
 let passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,20}$/;
 
-server.use(express.json())
 server.use(cors())
+server.use(express.json())
 
 // connection with the database
 mongoose.connect(process.env.DB_LOCATION, {
@@ -34,16 +34,17 @@ const formatDatatoSend = (user) => {
     }
 }
 
-
-
-
 // dynamically generate username for the user if same email exist
 const generateUsername = async (email) => {
 
     let username = email.split("@")[0]
 
     // if username not unique
-    let isUsernameExist = await User.exists({ "personal_info.username": username }).then((result) => result)
+    let isUsernameExist = await User.exists(
+        {
+            "personal_info.username": username
+        }
+    ).then((result) => result)
 
     isUsernameExist ? username += nanoid().substring(0, 5) : ""
     return username
@@ -53,94 +54,73 @@ const generateUsername = async (email) => {
 
 
 // signup post request -->
-server.post("/signup", (req, res) => {
+server.post("/signup", async (req, res) => {
+    try {
+        let { fullname, email, password } = req.body;
 
-    // Destructuring data for particular route / INSTEAD OF 'req.body.fullname'
-    let { fullname, email, password } = req.body
+        // Validating the data from frontend
+        if (!fullname || fullname.trim().length < 3) {
+            return res.status(400).json({ "error": "Full Name must be at least 3 letters long" });
+        }
+        if (!email) {
+            return res.status(400).json({ "error": "Enter email" });
+        }
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ "error": "Email is invalid" });
+        }
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ "error": "Password should be 6 to 20 characters long with a numeric, 1 lowercase and 1 uppercase" });
+        }
 
-    // validating the data from frontend
-    if (!fullname || fullname.length < 3) {
-        return res.status(403).json({ "error": "Full Name must be 3 letters long" })
-    }
-    if (!email) {
-        return res.status(403).json({ "error": "Enter email" })
-    }
-    if (!emailRegex.test(email)) {
-        return res.status(403).json({ "error": "Email is invalid" })
-    }
-    if (!passwordRegex.test(password)) {
-        return res.status(403).json({ "error": "Password should be 6 to 20 charcters long with a numeric, 1 lowercase and 1 uppercase" })
-    }
-
-
-    // hashing of password using bcryptjs
-    bcrypt.hash(password, 10, async (err, hashed_password) => {
-
-        let username = await generateUsername(email)
+        // Hashing of password using bcryptjs
+        const hashed_password = await bcrypt.hash(password, 10);
+        let username = await generateUsername(email);
 
         let user = new User({
             personal_info: { fullname, email, password: hashed_password, username }
-        })
+        });
 
+        const savedUser = await user.save();
+        return res.status(200).json(formatDatatoSend(savedUser));
 
-        // since user.save() is a promise
-        user.save().then((savedUser) => {
-            return res.status(200).json(formatDatatoSend(savedUser))
-
-        }).catch(err => {
-
-            if (err.code == 11000) {
-                return res.status(500).json({ "error": "Email already exists!" })
+    } catch (err) {
+        if (err.code === 11000) {
+            // Distinguish between duplicate email and duplicate username
+            if (err.message && err.message.includes('email')) {
+                return res.status(409).json({ "error": "Email already exists!" });
             }
+            if (err.message && err.message.includes('username')) {
+                return res.status(409).json({ "error": "Username already taken! Please try again." });
+            }
+            return res.status(409).json({ "error": "Duplicate entry exists!" });
+        }
+        return res.status(500).json({ "error": err.message });
+    }
+});
 
-            return res.status(500).json({ "error": err.message })
-        })
+server.post("/signin", async (req, res) => {
+    try {
+        let { email, password } = req.body;
 
-        // console.log(hashed_password);
-    })
-
-
-    // return res.status(200).json({ "status": "Okay" })
-
-})
-
-server.post("/signin", (req, res) => {
-    // destructuring data from the frontend
-    let {email, password} = req.body
-
-    User.findOne({"personal_info.email": email})
-    .then((user) => {
-
-        // if there is no user
-        if(!user){
-            return res.status(403).json({"error": "Email not found!"})
+        const user = await User.findOne({ "personal_info.email": email });
+        
+        if (!user) {
+            return res.status(401).json({ "error": "Email not found!" });
         }
 
-        bcrypt.compare(password, user.personal_info.password, (err, result) => {
-
-            if(err){
-                return res.status(403).json({"error": "Error occured while login please try again"})
-            }
-            if(!result){
-                return res.status(403).json({"error": "Incorrect password!"})
-            } else{
-                return res.status(200).json(formatDatatoSend(user))
-            }
-
-        })
-
-        // console.log(user);
-        // return res.json({"status": "user document fetched"})
+        const isMatch = await bcrypt.compare(password, user.personal_info.password);
         
-    }).catch(err => {
-        console.log(err.message);
-        return res.status(500).json({"error": err.message})
-        
-        
-    })
+        if (!isMatch) {
+            return res.status(401).json({ "error": "Incorrect password!" });
+        }
 
-
-})
+        return res.status(200).json(formatDatatoSend(user));
+        
+    } catch (err) {
+        console.error(err.message);
+        return res.status(500).json({ "error": "An internal server error occurred" });
+    }
+});
 
 server.listen(PORT, () => {
     console.log('listening on port ->' + PORT);

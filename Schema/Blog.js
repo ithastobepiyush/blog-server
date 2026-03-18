@@ -9,6 +9,7 @@ const blogSchema = mongoose.Schema({
     },
     title: {
         type: String,
+        trim: true,
         required: true,
     },
     banner: {
@@ -17,6 +18,7 @@ const blogSchema = mongoose.Schema({
     },
     des: {
         type: String,
+        trim: true,
         maxlength: 200,
         // required: true
     },
