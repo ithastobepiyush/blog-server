@@ -128,28 +128,59 @@ server.post("/signup", async (req, res) => {
 });
 
 server.post("/signin", async (req, res) => {
-    try {
-        let { email, password } = req.body;
+  try{
+    // destructuring the data recieved from frontend
+    const {email, password} = req.body
 
-        const user = await User.findOne({ "personal_info.email": email });
-        
-        if (!user) {
-            return res.status(401).json({ "error": "Email not found!" });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.personal_info.password);
-        
-        if (!isMatch) {
-            return res.status(401).json({ "error": "Incorrect password!" });
-        }
-
-        return res.status(200).json(formatDatatoSend(user));
-        
-    } catch (err) {
-        console.error(err.message);
-        return res.status(500).json({ "error": "An internal server error occurred" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
     }
-});
+  
+    const user = await User.findOne({
+      "personal_info.email": email
+    })
+    if(!user){
+      return res.status(401).json({"error" : "Email not found!"})
+    }
+    
+    const isPasswordMatch = await bcrypt.compare(password, user.personal_info.password)
+
+    if(!isPasswordMatch){
+      return res.status(401).json({"error" : "Incorrect password"})
+    }
+
+    return res.status(200).json(formatDatatoSend(user))
+
+  } catch(err) {
+      console.log(err.message);
+      return res.status(500).json({"error" : "An internal server error occured!"})
+  }
+})
+
+
+// server.post("/signin", async (req, res) => {
+//     try {
+//         let { email, password } = req.body;
+
+//         const user = await User.findOne({ "personal_info.email": email });
+        
+//         if (!user) {
+//             return res.status(401).json({ "error": "Email not found!" });
+//         }
+
+//         const isMatch = await bcrypt.compare(password, user.personal_info.password);
+        
+//         if (!isMatch) {
+//             return res.status(401).json({ "error": "Incorrect password!" });
+//         }
+
+//         return res.status(200).json(formatDatatoSend(user));
+        
+//     } catch (err) {
+//         console.error(err.message);
+//         return res.status(500).json({ "error": "An internal server error occurred" });
+//     }
+// });
 
 server.listen(PORT, () => {
     console.log('listening on port ->' + PORT);

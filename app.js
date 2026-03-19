@@ -50,6 +50,7 @@ const generateUsername = async (email) => {
 // signup route , post request
 app.post("/signup", async (req, res) => {
   try {
+
     const { fullname, email, password } = req.body;
 
     // handelling error with fat arrow function
@@ -61,7 +62,7 @@ app.post("/signup", async (req, res) => {
     };
 
     // validating data from frontend
-    if (!fullname || fullname.trim().length < 3) {
+    if (fullname.trim().length < 3) {
       return sendError("Fullname must be 3 letters long!");
     }
 
@@ -93,18 +94,49 @@ app.post("/signup", async (req, res) => {
 
   } catch (err) {
       if (err.code === 11000) {
-      // duplicacy error
-      if (err.keyPattern && err.keyPattern["personal_info.email"]) {
-        return res.status(409).json({ error: "Email already exist!" });
+        // duplicacy error
+        if (err.keyPattern && err.keyPattern["personal_info.email"]) {
+          return res.status(409).json({ error: "Email already exist!" });
+        }
+        if (err.keyPattern && err.keyPattern["personal_info.username"]) {
+          return res.status(409).json({ error: "Username already exists!" });
+        }
       }
-      if (err.keyPattern && err.keyPattern["personal_info.username"]) {
-        return res.status(409).json({ error: "Username already exists!" });
-      }
+      // console.log(err); //instead of throwing internal error to frontend / log them 
+      return res.status(500).json({ "error": "Internal server error" })
     }
-    // console.log(err); //instead of throwing internal error to frontend / log them 
-    return res.status(500).json({ "error": "Internal server error" })
-  }
 });
+
+// signin route, post request
+app.post("/signin", async (req, res) => {
+  try{
+    // destructuring the data recieved from frontend
+    const {email, password} = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+  
+    const user = await User.findOne({
+      "personal_info.email": email
+    })
+    if(!user){
+      return res.status(401).json({"error" : "Email not found!"})
+    }
+    
+    const isPasswordMatch = await bcrypt.compare(password, user.personal_info.password)
+
+    if(!isPasswordMatch){
+      return res.status(401).json({"error" : "Incorrect password"})
+    }
+
+    return res.status(200).json(formatDatatoSend(user))
+
+  } catch(err) {
+      console.log(err.message);
+      return res.status(500).json({"error" : "An internal server error occured!"})
+  }
+})
 
 app.listen(PORT, () => {
   console.log(`listening on PORT: ${PORT}`);
