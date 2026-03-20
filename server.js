@@ -8,10 +8,10 @@ import cors from 'cors'
 import admin from 'firebase-admin'
 import fs from 'fs';
 import { getAuth } from 'firebase-admin/auth'
-
+import { PutObjectAclCommand, S3Client } from '@aws-sdk/client-s3'
 // Schemas
 import User from './Schema/User.js'
-import { assert } from 'console'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Load JSON manually (no import)
 const serviceAccountKey = JSON.parse(
@@ -33,10 +33,44 @@ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,20}
 
 server.use(cors())
 server.use(express.json());
+
 // connection with the database
 mongoose.connect(process.env.DB_LOCATION, {
     autoIndex: true
 })
+// s3 bucket
+const s3 = new S3Client({
+    region: "eu-north-1",
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }
+})
+//  url generation function
+const generateUploadUrl = async () => {
+    const date = new Date()
+    const imageName = `${nanoid()}-${date.getTime()}.jpeg`
+
+    // Create a put object command
+    const command = new PutObjectAclCommand({
+      Bucket: 'react-app-median ',  
+      Key: imageName,
+      ContentType: "image/jpeg"
+    })
+    // 2. generate presigned url
+    return await getSignedUrl(s3, command, {expiresIn: 3600})
+}
+
+server.get('/get-upload-url', async (req, res) => {
+    try {
+        const url = await generateUploadUrl()
+        return res.status(200).json({uploadUrl: url})
+    } catch (err) {
+        console.log(err);
+        return res.status(500).json({ error: err.message})
+    }
+})
+
 
 const formatDatatoSend = (user) => {
     const accessToken = jwt.sign({id: user._id}, process.env.SECRET_ACCESS_KEY)
@@ -64,6 +98,8 @@ const generateUsername = async (email) => {
     return username
 
 }
+
+
 
 // signup post request -->
 server.post("/signup", async (req, res) => {
@@ -205,7 +241,7 @@ server.post("/google-auth", async(req, res) => {
                 personal_info: {
                     fullname: name,
                     email,
-                    profile_img: picture,
+                    // profile_img: picture,
                     username
                 },
                 google_auth: true
