@@ -5,20 +5,34 @@ import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import jwt from 'jsonwebtoken'
 import cors from 'cors'
+import admin from 'firebase-admin'
+import fs from 'fs';
+import { getAuth } from 'firebase-admin/auth'
 
 // Schemas
 import User from './Schema/User.js'
+import { assert } from 'console'
+
+// Load JSON manually (no import)
+const serviceAccountKey = JSON.parse(
+  fs.readFileSync(
+    new URL('./react-js-blog-website-11a40-firebase-adminsdk-fbsvc-e21a3247b5.json', import.meta.url)
+  )
+);
 
 const server = express()
 let PORT = 3000
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccountKey),
+});
 
 // Validation Utility regex for email &password
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,20}$/;
 
 server.use(cors())
-server.use(express.json())
-
+server.use(express.json());
 // connection with the database
 mongoose.connect(process.env.DB_LOCATION, {
     autoIndex: true
@@ -107,7 +121,7 @@ server.post("/signup", async (req, res) => {
             return res.status(409).json({ error: "Username already exists!" });
         }
         }
-        // console.log(err); //instead of throwing internal error to frontend / log them 
+        console.error("Signup Error: ", err); 
         return res.status(500).json({ "error": "Internal server error" })
     }
     
@@ -143,6 +157,10 @@ server.post("/signin", async (req, res) => {
       return res.status(401).json({"error" : "Email not found!"})
     }
     
+    if(user.google_auth){
+      return res.status(403).json({"error" : "Account was created with Google. Please log in with Google."})
+    }
+    
     const isPasswordMatch = await bcrypt.compare(password, user.personal_info.password)
 
     if(!isPasswordMatch){
@@ -158,29 +176,52 @@ server.post("/signin", async (req, res) => {
 })
 
 
-// server.post("/signin", async (req, res) => {
-//     try {
-//         let { email, password } = req.body;
+server.post("/google-auth", async(req, res) => {
+    let {accessToken} = req.body
 
-//         const user = await User.findOne({ "personal_info.email": email });
-        
-//         if (!user) {
-//             return res.status(401).json({ "error": "Email not found!" });
-//         }
+    try {
+        // 1.verify google token
+        const decodedUser = await getAuth().verifyIdToken(accessToken)
+        let {email, name, picture} = decodedUser
 
-//         const isMatch = await bcrypt.compare(password, user.personal_info.password);
-        
-//         if (!isMatch) {
-//             return res.status(401).json({ "error": "Incorrect password!" });
-//         }
+        // 2. format image
+        picture = picture.replace("s96-c", "s384-c")
 
-//         return res.status(200).json(formatDatatoSend(user));
-        
-//     } catch (err) {
-//         console.error(err.message);
-//         return res.status(500).json({ "error": "An internal server error occurred" });
-//     }
-// });
+        // 3. find user
+        let user = await User.findOne({"personal_info.email": email}).select(
+            "personal_info.fullname personal_info.username personal_info.profile_img google_auth"
+        )
+        if(user){
+            // User exist, check if they originally signed up with googlw
+            if(!user.google_auth){
+                return res.status(403).json({
+                    "error" : "This email signed up without Google. Please login with password."
+                })
+            }
+        } else {
+            // new user - create account
+            const username = await generateUsername(email)
+            user = new User({
+                personal_info: {
+                    fullname: name,
+                    email,
+                    profile_img: picture,
+                    username
+                },
+                google_auth: true
+            })
+            await user.save()
+        }
+        return res.status(200).json(formatDatatoSend(user))
+
+    } catch (err) {
+        // This catches ANY error: Token verification, Database or save() errors
+        console.error("Auth Error", err);
+        return res.status(500).json({
+            error: "failed to authenticate with Google. Try another account"
+        })
+    }
+})
 
 server.listen(PORT, () => {
     console.log('listening on port ->' + PORT);
