@@ -8,7 +8,7 @@ import cors from 'cors'
 import admin from 'firebase-admin'
 import fs from 'fs';
 import { getAuth } from 'firebase-admin/auth'
-import { PutObjectAclCommand, S3Client } from '@aws-sdk/client-s3'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 // Schemas
 import User from './Schema/User.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -52,13 +52,13 @@ const generateUploadUrl = async () => {
     const imageName = `${nanoid()}-${date.getTime()}.jpeg`
 
     // Create a put object command
-    const command = new PutObjectAclCommand({
-      Bucket: 'react-app-median ',  
+    const command = new PutObjectCommand({
+      Bucket: 'react-app-median',  
       Key: imageName,
       ContentType: "image/jpeg"
     })
     // 2. generate presigned url
-    return await getSignedUrl(s3, command, {expiresIn: 3600})
+    return await getSignedUrl(s3, command, {expiresIn: 1000})
 }
 
 server.get('/get-upload-url', async (req, res) => {
