@@ -9,11 +9,13 @@ import admin from 'firebase-admin'
 import fs from 'fs';
 import { getAuth } from 'firebase-admin/auth'
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-// Schemas
-import User from './Schema/User.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
-// Load JSON manually (no import)
+// Schemas
+import User from './Schema/User.js'
+import Blog from './Schema/Blog.js'
+
+// loading data/JSON manually 
 const serviceAccountKey = JSON.parse(
   fs.readFileSync(
     new URL('./react-js-blog-website-11a40-firebase-adminsdk-fbsvc-e21a3247b5.json', import.meta.url)
@@ -21,7 +23,7 @@ const serviceAccountKey = JSON.parse(
 );
 
 const server = express()
-let PORT = 3000
+let PORT =  3000
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccountKey),
@@ -38,7 +40,7 @@ server.use(express.json());
 mongoose.connect(process.env.DB_LOCATION, {
     autoIndex: true
 })
-// s3 bucket
+// s3 bucket integration
 const s3 = new S3Client({
     region: "eu-north-1",
     credentials: {
@@ -46,7 +48,9 @@ const s3 = new S3Client({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     }
 })
-//  url generation function
+
+
+//  s3 bucket url generation function
 const generateUploadUrl = async () => {
     const date = new Date()
     const imageName = `${nanoid()}-${date.getTime()}.jpeg`
@@ -61,6 +65,7 @@ const generateUploadUrl = async () => {
     return await getSignedUrl(s3, command, {expiresIn: 1000})
 }
 
+// upload url route from AWS v3 sdk
 server.get('/get-upload-url', async (req, res) => {
     try {
         const url = await generateUploadUrl()
@@ -72,8 +77,34 @@ server.get('/get-upload-url', async (req, res) => {
 })
 
 
+// cross auth middleware JWT
+// middleware for the '/create-blog' route
+const verifyJWT = (req, res, next) => {
+
+    const authHeader = req.headers['authorization']
+    
+    const token = authHeader && authHeader.split(" ")[1]
+
+    // revert no access token
+    if(token == null){
+        return res.status(401).json({error : "No access token"})
+    }
+    
+    // if invalid - revert invalid identity 
+    jwt.verify(token, process.env.SECRET_ACCESS_KEY, (err, user) => {
+        if(err){
+            return res.status(403).json({error : "Access token is invalid"})
+        }
+        req.user = user.id;
+        next();
+        
+    })
+
+}
+
+// formatted data to send to user body ||| Includes JWT
 const formatDatatoSend = (user) => {
-    const accessToken = jwt.sign({id: user._id}, process.env.SECRET_ACCESS_KEY)
+    const accessToken = jwt.sign({ id: user._id }, process.env.SECRET_ACCESS_KEY)
     return {
         accessToken,
         profile_img: user.personal_info.profile_img,
@@ -100,8 +131,7 @@ const generateUsername = async (email) => {
 }
 
 
-
-// signup post request -->
+// Signup post request -->
 server.post("/signup", async (req, res) => {
     try {
 
@@ -160,23 +190,9 @@ server.post("/signup", async (req, res) => {
         console.error("Signup Error: ", err); 
         return res.status(500).json({ "error": "Internal server error" })
     }
-    
-    
-    // catch (err) {
-    //     if (err.code === 11000) {
-    //         // Distinguish between duplicate email and duplicate username
-    //         if (err.message && err.message.includes('email')) {
-    //             return res.status(409).json({ "error": "Email already exists!" });
-    //         }
-    //         if (err.message && err.message.includes('username')) {
-    //             return res.status(409).json({ "error": "Username already taken! Please try again." });
-    //         }
-    //         return res.status(409).json({ "error": "Duplicate entry exists!" });
-    //     }
-    //     return res.status(500).json({ "error": err.message });
-    // }
 });
 
+// Signin post request -->
 server.post("/signin", async (req, res) => {
   try{
     // destructuring the data recieved from frontend
@@ -212,6 +228,7 @@ server.post("/signin", async (req, res) => {
 })
 
 
+// Google authentication post request -->
 server.post("/google-auth", async(req, res) => {
     let {accessToken} = req.body
 
@@ -257,6 +274,65 @@ server.post("/google-auth", async(req, res) => {
             error: "failed to authenticate with Google. Try another account"
         })
     }
+})
+
+// blog create route with  validation to save datat
+server.post('/create-blog', verifyJWT, (req, res) => {
+
+    // console.log(req.body);
+    // return res.json(req.body)
+    
+
+    let authorId = req.user
+
+    let { title, des, banner, tags, content, draft } = req.body
+
+    if(!title.length){
+        return res.status(403).json({error : "Title is mandatory"})
+    }
+
+    if(!draft){
+        if(!des.length || !des.length >200){
+            return res.status(403).json({error : "Blog Description is mandatory"})
+        }
+        if(!banner.length){
+            return res.status(403).json({error : "Blog Banner is mandatory"})
+        }
+        if(!content.blocks.length){
+            return res.status(403).json({error : "There must be some blog content to publish"})
+        }
+        if(!tags.length || tags.length > 10){
+            return res.status(403).json({error : "Add a few hashtags so others can find your post."})
+        }
+
+    }
+
+
+    tags = tags.map(tag => tag.toLowerCase())
+
+    let blog_id = title.replace(/[^a-zA-Z0-9]/g, ' ').replace(/\s+/g, '-').trim() + nanoid()
+    // console.log(blogId);
+
+    let blog = new Blog({
+        title, des, banner, content, tags, author: authorId, blog_id, draft: Boolean(draft)
+
+    })
+
+
+    blog.save().then( blog => {
+        let incrementVal = draft ? 0 : 1
+
+        User.findOneAndUpdate({_id : authorId}, { $inc : {"account_info.total_posts" : incrementVal}, $push : {"blogs" : blog._id } } )
+        .then(user => {
+            return res.status(200).json({id: blog.blog_id })
+        })
+        .catch(err => {
+            return res.status(500).json({ error: "Failed to upload total post number"})
+        })
+    })  
+    .catch (err => {
+        return res.status(500).json({ error: err.message})
+    })
 })
 
 server.listen(PORT, () => {

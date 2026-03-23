@@ -1,2 +1,40 @@
+POST  http://localhost:3000/create-blog
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzEwYzc0OGE4YzhmNmNkMjk0MTEyOSIsImlhdCI6MTc3NDI1OTMxNn0.GGErCSwKwqHPZ2eLrtrRjrmb2t07sHYLPsorDIK_z7c
 
-GET http://localhost:3000/get-upload-url
+{
+    "title" : "the avengers",
+    "banner" : " http://localhost:3000/create-blog",
+    "des" : "@/Offon1124",
+    "content" : {
+        "blocks": [1, 2]
+    },
+    "tags" : ["tag1", "tag2"]
+}
+
+
+
+# eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzBmNzkwYjhlN2Y5NTdhMWMxZmNlNiIsImlhdCI6MTc3NDI1Mzk2OH0.WFEQXbSCzRy17HYPesRK0EZpXSVdcwYxaZzaJpQD9IY
+
+
+
+
+
+
+
+
+
+
+
+
+
+# POST  http://localhost:3000/signup
+# Content-Type: application/json
+
+# {
+#     "fullname" : "ram",
+#     "email" : "ramt@gmail.com",
+#     "password" : "@/Offon1124"
+# }
+
+
